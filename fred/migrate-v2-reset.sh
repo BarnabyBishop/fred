@@ -91,7 +91,9 @@ printf '%s  Restored %s\n' "$(green '✓')" "setup/ install helpers"
 
 # Restore package.json + lockfile (channel installs add deps like
 # @whiskeysockets/baileys). node_modules/ is intentionally kept.
-git checkout -- package.json pnpm-lock.yaml 2>/dev/null || true
+# `:/` anchors the lockfile at the repo root — it lives one level up in the
+# monorepo, alongside pnpm-workspace.yaml.
+git checkout -- package.json :/pnpm-lock.yaml 2>/dev/null || true
 printf '%s  Restored %s\n' "$(green '✓')" "package.json + pnpm-lock.yaml"
 
 echo

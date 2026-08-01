@@ -93,7 +93,7 @@
 // Usage: pnpm exec tsx scripts/skill-directives.ts <SKILL.md>
 
 import { readFileSync, existsSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 
 export interface Directive {
   kind: string;
@@ -187,16 +187,25 @@ function referencedVars(d: Directive): string[] {
 /**
  * The resolved `chat` core version from our lockfile — the single source of
  * truth a `@chat-adapter/*` adapter pin must match (the adapter and the core
- * move in lockstep). Reads the root importer's direct `chat` dependency, whose
+ * move in lockstep). Reads this package's direct `chat` dependency, whose
  * `specifier`/`version` pair is unique to importer deps (transitive entries in
  * the packages section have no `specifier`). Returns undefined if not found.
+ *
+ * Walks up from `root` to find the lockfile: in the monorepo it sits at the
+ * workspace root, a level above this package.
  */
 export function resolveChatCoreVersion(root: string): string | undefined {
   let lock = '';
-  try {
-    lock = readFileSync(join(root, 'pnpm-lock.yaml'), 'utf8');
-  } catch {
-    return undefined;
+  let dir = root;
+  for (;;) {
+    try {
+      lock = readFileSync(join(dir, 'pnpm-lock.yaml'), 'utf8');
+      break;
+    } catch {
+      const parent = dirname(dir);
+      if (parent === dir) return undefined;
+      dir = parent;
+    }
   }
   const m = lock.match(/\n\s+chat:\n\s+specifier:[^\n]*\n\s+version:\s*([0-9][^\s(]*)/);
   return m?.[1];

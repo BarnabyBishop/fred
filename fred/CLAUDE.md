@@ -17,6 +17,31 @@ If you are a fresh install (you ran `git clone`, not `git pull`) and there are n
 
 Personal AI assistant. See [README.md](README.md) for philosophy and setup. Architecture lives in `docs/`.
 
+## Repository Layout
+
+This is the `nanoclaw` package inside the **Fred monorepo**. Everything below is
+relative to this directory (`fred/`), which is the project root for every command,
+path, and doc reference here — run host commands from `fred/`, not the repo root.
+
+```
+<repo root>/          pnpm-workspace.yaml, pnpm-lock.yaml, .github/, .husky/, root package.json
+├── fred/             ← you are here (package "nanoclaw")
+└── gazoo/            web UI that consumes Fred
+```
+
+What lives at the **repo root**, one level up, and not here:
+
+| At repo root | Why |
+|--------------|-----|
+| `pnpm-lock.yaml` | One lockfile for the whole workspace. `pnpm install` from either level updates it. |
+| `pnpm-workspace.yaml` | Workspace members + `minimumReleaseAge` + `onlyBuiltDependencies`. |
+| `.husky/` | Git hooks are repo-wide; `prepare: husky` lives in the root `package.json`. Hooks run with cwd at the repo root, so paths inside them are `fred/`-prefixed. |
+| `.github/` | Actions only read workflows from the repo root. CI steps use `working-directory: fred`. |
+
+`container/agent-runner/` is deliberately **not** a workspace member — it is a Bun
+tree with its own `bun.lock` (see [docs/build-and-runtime.md](docs/build-and-runtime.md)).
+Only `fred` and `gazoo` are listed in `pnpm-workspace.yaml`.
+
 ## Quick Context
 
 The host is a single Node process that orchestrates per-session agent containers. Platform messages land via channel adapters, route through an entity model (users → messaging groups → agent groups → sessions), get written into the session's inbound DB, and wake a container. The agent-runner inside the container polls the DB, calls the agent, and writes back to the outbound DB. The host polls the outbound DB and delivers through the same adapter.
@@ -269,7 +294,7 @@ Two rules, no exceptions:
 
 ## Supply Chain Security (pnpm)
 
-This project uses pnpm with `minimumReleaseAge: 4320` (3 days) in `pnpm-workspace.yaml`. New package versions must exist on the npm registry for 3 days before pnpm will resolve them.
+This project uses pnpm with `minimumReleaseAge: 4320` (3 days) in `pnpm-workspace.yaml` — at the **repo root**, one level above this directory. It governs every workspace member. New package versions must exist on the npm registry for 3 days before pnpm will resolve them.
 
 **Rules — do not bypass without explicit human approval:**
 - **`minimumReleaseAgeExclude`**: Never add entries without human sign-off. If a package must bypass the release age gate, the human must approve and the entry must pin the exact version being excluded (e.g. `package@1.2.3`), never a range.
