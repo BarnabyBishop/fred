@@ -1,0 +1,8 @@
+# Git runs hooks with cwd at the repository root, not at this package — so the
+# pathspec and the pnpm filter are both written from there, even though this
+# hook belongs to fred/. `prepare` in fred/package.json points husky here.
+staged=$(git diff --cached --name-only --diff-filter=ACM -- 'fred/src/**/*.ts')
+pnpm --filter nanoclaw run format:fix
+if [ -n "$staged" ]; then
+  echo "$staged" | xargs git add
+fi

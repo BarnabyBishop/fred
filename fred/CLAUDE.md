@@ -24,19 +24,30 @@ relative to this directory (`fred/`), which is the project root for every comman
 path, and doc reference here — run host commands from `fred/`, not the repo root.
 
 ```
-<repo root>/          pnpm-workspace.yaml, pnpm-lock.yaml, .github/, .husky/, root package.json
-├── fred/             ← you are here (package "nanoclaw")
+<repo root>/          pnpm-workspace.yaml, pnpm-lock.yaml, package.json  (and nothing else of ours)
+├── fred/             ← you are here (package "nanoclaw"), incl. .github/, .husky/,
+│                       .npmrc, .nvmrc, LICENSE — the whole upstream tree
 └── gazoo/            web UI that consumes Fred
 ```
 
-What lives at the **repo root**, one level up, and not here:
+Everything NanoClaw ships with lives here, not at the root. The root belongs to
+the monorepo's own tooling. Only three things sit up there, and only because pnpm
+requires it:
 
-| At repo root | Why |
-|--------------|-----|
-| `pnpm-lock.yaml` | One lockfile for the whole workspace. `pnpm install` from either level updates it. |
-| `pnpm-workspace.yaml` | Workspace members + `minimumReleaseAge` + `onlyBuiltDependencies`. |
-| `.husky/` | Git hooks are repo-wide; `prepare: husky` lives in the root `package.json`. Hooks run with cwd at the repo root, so paths inside them are `fred/`-prefixed. |
-| `.github/` | Actions only read workflows from the repo root. CI steps use `working-directory: fred`. |
+| At repo root | Why it can't live here |
+|--------------|------------------------|
+| `pnpm-workspace.yaml` | Defines the workspace. Also the only place pnpm reads `minimumReleaseAge` and `onlyBuiltDependencies` — they are workspace-wide by design. |
+| `pnpm-lock.yaml` | One lockfile per workspace. `pnpm install` from either level updates it; `resolveChatCoreVersion` walks up to find it. |
+| `package.json` | The workspace root manifest. Carries no NanoClaw scripts or deps. |
+
+Two consequences worth knowing:
+
+- **`.github/` here is dormant.** GitHub only reads workflows from the repository
+  root, so `fred/.github/workflows/ci.yml` does not run on push or PR. Its paths
+  are relative to this directory, so it stays mergeable with upstream.
+- **`.husky/` here is live.** `prepare` runs `cd .. && husky fred/.husky` (husky v9
+  needs `.git` in its cwd), setting `core.hooksPath` to `fred/.husky/_`. Hooks
+  execute with cwd at the repo root, so paths inside them are `fred/`-prefixed.
 
 `container/agent-runner/` is deliberately **not** a workspace member — it is a Bun
 tree with its own `bun.lock` (see [docs/build-and-runtime.md](docs/build-and-runtime.md)).

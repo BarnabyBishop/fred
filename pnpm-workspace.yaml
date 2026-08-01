@@ -2,6 +2,11 @@ packages:
   - fred
   - gazoo
 
+# The two settings below came in with NanoClaw and stay here only because pnpm
+# reads them nowhere else — they have no per-package equivalent, so they now
+# apply workspace-wide (gazoo included). See fred/CLAUDE.md § Supply Chain
+# Security before changing either: additions to onlyBuiltDependencies execute
+# arbitrary install scripts, and minimumReleaseAge is a deliberate 3-day gate.
 onlyBuiltDependencies:
   - better-sqlite3
   - esbuild

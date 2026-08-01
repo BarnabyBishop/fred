@@ -1,5 +1,0 @@
-staged=$(git diff --cached --name-only --diff-filter=ACM -- 'fred/src/**/*.ts')
-pnpm --filter nanoclaw run format:fix
-if [ -n "$staged" ]; then
-  echo "$staged" | xargs git add
-fi

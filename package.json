@@ -2,23 +2,7 @@
   "name": "fred-monorepo",
   "version": "0.0.0",
   "private": true,
-  "description": "Fred monorepo — the NanoClaw-derived host (fred) and its UI (gazoo).",
+  "description": "Monorepo root. Workspace members live in fred/ and gazoo/.",
   "type": "module",
-  "packageManager": "pnpm@10.33.0",
-  "scripts": {
-    "prepare": "husky",
-    "build": "pnpm -r run build",
-    "test": "pnpm -r run test",
-    "typecheck": "pnpm -r run typecheck",
-    "lint": "pnpm -r run lint",
-    "format:check": "pnpm -r run format:check",
-    "dev": "pnpm --filter nanoclaw run dev",
-    "ncl": "pnpm --filter nanoclaw run ncl"
-  },
-  "devDependencies": {
-    "husky": "^9.1.7"
-  },
-  "engines": {
-    "node": ">=20"
-  }
+  "packageManager": "pnpm@10.33.0"
 }
