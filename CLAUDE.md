@@ -63,7 +63,8 @@ For ad-hoc queries from skills or scripts, use the in-tree wrapper rather than t
 | `src/router.ts` | Inbound routing: messaging group → agent group → session → `inbound.db` → wake |
 | `src/delivery.ts` | Polls `outbound.db`, delivers via adapter, handles system actions (schedule, approvals, etc.) |
 | `src/delivery-guard.ts` | `DeliveryGuardSpec` + `runGuarded` — the guard-consult pipeline for privileged delivery actions (registry stays in `delivery.ts`) |
-| `src/host-sweep.ts` | 60s sweep: `processing_ack` sync, stale detection, due-message wake, recurrence |
+| `src/host-sweep.ts` | 60s sweep: `processing_ack` sync, stale detection, due-message wake, recurrence, provider-state disk guard |
+| `src/provider-state-guard.ts` | Bounds provider-owned state files under `data/v2-sessions/<group-id>/` (codex's `logs_2.sqlite`) — renames aside past a 2GB cap so the next spawn isn't wedged by a multi-GB open |
 | `src/session-manager.ts` | Resolves sessions; opens `inbound.db` / `outbound.db`; manages heartbeat path |
 | `src/container-runner.ts` | Spawns per-agent-group Docker containers with session DB + outbox mounts, OneCLI `ensureAgent` |
 | `src/container-runtime.ts` | Docker CLI wrapper (runtime binary, host-gateway args, mount args), orphan cleanup |
@@ -257,6 +258,7 @@ Check these first when something goes wrong:
 | Host logs | `logs/nanoclaw.error.log` first (delivery failures, crash-loop backoff, warnings), then `logs/nanoclaw.log` for the full routing chain |
 | Setup logs | `logs/setup.log` (overall), `logs/setup-steps/*.log` (per-step: bootstrap, environment, container, onecli, mounts, service, etc.) |
 | Session DBs | `data/v2-sessions/<agent-group>/<session>/` — `inbound.db` (`messages_in`: did the message reach the container?), `outbound.db` (`messages_out`: did the agent produce a response?) |
+| Provider state dirs | `du -sh data/v2-sessions/*/.codex-shared` — a group whose state dir dwarfs the others is about to stop answering (see `src/provider-state-guard.ts`; the sweep logs `Rotated oversized provider state file`) |
 
 Note: container logs are lost after the container exits (`--rm` flag). If the agent silently failed inside the container, there's no persistent log to inspect.
 

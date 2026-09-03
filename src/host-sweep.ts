@@ -44,7 +44,15 @@ import {
   type ContainerState,
 } from './db/session-db.js';
 import { log } from './log.js';
-import { openInboundDb, openOutboundDb, openOutboundDbRw, inboundDbPath, heartbeatPath } from './session-manager.js';
+import {
+  openInboundDb,
+  openOutboundDb,
+  openOutboundDbRw,
+  inboundDbPath,
+  heartbeatPath,
+  sessionsBaseDir,
+} from './session-manager.js';
+import { sweepProviderStateFiles } from './provider-state-guard.js';
 import { isContainerRunning, killContainer, wakeContainer } from './container-runner.js';
 import type { Session } from './types.js';
 
@@ -141,6 +149,16 @@ async function sweep(): Promise<void> {
     ensureEgressNetwork();
   } catch (err) {
     log.error('Egress lockdown re-heal failed', { err });
+  }
+
+  // Bound provider-owned state files (codex's `logs_2.sqlite`) before touching
+  // sessions: an oversized one makes every spawn for that group time out at the
+  // provider's own handshake, so the wake below would fail silently. Once per
+  // tick across all groups — it is a handful of stat() calls.
+  try {
+    sweepProviderStateFiles(sessionsBaseDir());
+  } catch (err) {
+    log.error('Provider state guard failed', { err });
   }
 
   try {

@@ -19,6 +19,7 @@ const envConfig = readEnvFile([
   'NANOCLAW_EGRESS_LOCKDOWN',
   'NANOCLAW_EGRESS_NETWORK',
   'ONECLI_GATEWAY_CONTAINER',
+  'NANOCLAW_PROVIDER_STATE_MAX_BYTES',
 ]);
 
 /**
@@ -94,6 +95,16 @@ export const EGRESS_NETWORK =
   process.env.NANOCLAW_EGRESS_NETWORK || envConfig.NANOCLAW_EGRESS_NETWORK || 'nanoclaw-egress';
 export const ONECLI_GATEWAY_CONTAINER =
   process.env.ONECLI_GATEWAY_CONTAINER || envConfig.ONECLI_GATEWAY_CONTAINER || 'onecli';
+
+// Optional operator override for the size cap on provider-owned state files
+// under `data/v2-sessions/<group-id>/` (codex's `logs_2.sqlite` today). Bytes.
+// Null when unset or unparseable — src/provider-state-guard.ts owns the
+// default and does the rotating.
+export const PROVIDER_STATE_MAX_BYTES_OVERRIDE = (() => {
+  const raw = process.env.NANOCLAW_PROVIDER_STATE_MAX_BYTES || envConfig.NANOCLAW_PROVIDER_STATE_MAX_BYTES;
+  const parsed = raw ? Number(raw) : NaN;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+})();
 
 // Timezone for scheduled tasks, message formatting, etc.
 // Validates each candidate is a real IANA identifier before accepting.

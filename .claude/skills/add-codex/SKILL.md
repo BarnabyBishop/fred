@@ -9,9 +9,30 @@ description: Use Codex (OpenAI's codex app-server) as a full agent provider — 
 
 NanoClaw selects each group's agent backend from `container_configs.provider` (default `claude`). This skill installs the Codex provider: copy the payload from the `providers` branch, append one import to each of the three provider barrels, add the pinned Codex CLI to the container manifest (`container/cli-tools.json`), rebuild, then run the vault auth walk-through.
 
-The provider runs `codex app-server` as a child process speaking JSON-RPC over stdio: native streaming, MCP tools, server-side conversation history (the continuation is a thread id, no on-disk transcript). Credentials are **vault-only**: OneCLI serves a sentinel `auth.json` stub into the container and swaps the real ChatGPT token or API key on the wire — no key in `.env`, nothing readable in the container.
+The provider runs `codex app-server` as a child process speaking JSON-RPC over stdio: native streaming, MCP tools, server-side conversation history (the continuation is a thread id). Credentials are **vault-only**: OneCLI serves a sentinel `auth.json` stub into the container and swaps the real ChatGPT token or API key on the wire — no key in `.env`, nothing readable in the container.
 
 The mechanical steps under **Install** carry `nc:` directive fences: an agent reads the prose and applies them, and a parser can apply them deterministically from the same document. Every directive is idempotent, so the whole skill is safe to re-run; anything a parser can't apply falls back to the prose beside it.
+
+## Per-group state directory
+
+Codex keeps its own state at `data/v2-sessions/<group-id>/.codex-shared`, mounted RW at `/home/node/.codex`. It **outlives container restarts and image rebuilds** — restarting a group or repinning its image does not touch it. Two files in there grow without bound, and both have bitten us:
+
+- `logs_2.sqlite` — codex's tracing log, written at TRACE/DEBUG including `hyper_util::client::legacy::*` wire tracing (~2.9 KB/row, ~500 MB/day at a quiet baseline). codex opens this database **before** it answers the JSON-RPC `initialize` handshake, so once it is large enough the open blows the 30 s deadline and every spawn dies with `Error: Timeout waiting for initialize response (30000ms)` and a clean `[codex-app-server] [exit] code=0 signal=null`. One group reached 31 GB this way. The host bounds it as a backstop — `src/provider-state-guard.ts` renames an oversized `logs_2.sqlite` aside on a sweep tick (2 GB default, `NANOCLAW_PROVIDER_STATE_MAX_BYTES` in `.env` to change) and logs loudly; the payload should also set `RUST_LOG=warn` in its `ProviderContainerContribution.env` so the volume never builds up.
+- `sessions/YYYY/MM/DD/rollout-*.jsonl` — the rollout for each thread. Contrary to what this skill used to claim, codex **does** keep an on-disk transcript: it is re-parsed on every `thread/resume` (`Resumed rollout with N items`), and a long-lived group's rollout has been seen at 20.9 MB / 35k items. That is what `AgentProvider.maybeRotateContinuation` exists for (`container/agent-runner/src/providers/types.ts`); the Claude provider implements it against its `.jsonl` transcript in `providers/claude.ts`. The codex provider should mirror it against the rollout file for the thread id.
+
+Recovery when a group is already wedged: stop the **host service** first (the sweep respawns containers on a 60 s tick), then `mv` the log aside — never `VACUUM`, which needs ~2× the file size free — and clear the stored continuation if the rollout is also huge:
+
+```bash
+systemctl --user stop nanoclaw-v2-<slug>.service        # macOS: launchctl unload …
+docker stop $(docker ps -q --filter name=nanoclaw-v2-)
+CODEX=data/v2-sessions/<group-id>/.codex-shared
+mv $CODEX/logs_2.sqlite $CODEX/logs_2.sqlite.bak-$(date +%Y%m%d)
+pnpm exec tsx scripts/q.ts data/v2-sessions/<group-id>/<session-id>/outbound.db \
+  "DELETE FROM session_state WHERE key='continuation:codex';"
+systemctl --user start nanoclaw-v2-<slug>.service
+```
+
+Delete the backup and its `-wal`/`-shm` siblings once the group answers again. On a healthy group `/clear` is the better route to the same reset — the runner handles it before the provider is invoked.
 
 ## Install
 
@@ -137,4 +158,5 @@ This affects only groups created afterward. Per-group `ncl groups config update 
 
 - **Container dies at boot, channel silent:** `grep 'Container exited non-zero' logs/nanoclaw.error.log` — the `stderrTail` carries the reason (e.g. `Unknown provider: codex. Registered: claude` means the barrels aren't wired in the running build).
 - **In-channel `Error: spawn codex ENOENT` on every message:** the image predates the manifest entry — re-run `./container/build.sh`.
+- **`Timeout waiting for initialize response (30000ms)` on every message, container exits `code=0`:** the group's `.codex-shared/logs_2.sqlite` has grown too large to open — see **Per-group state directory** above. `ls -la data/v2-sessions/*/.codex-shared/logs_2.sqlite` compares groups in one line.
 - **Auth errors mid-conversation:** the vault secret is missing or stale — re-run `pnpm exec tsx setup/index.ts --step provider-auth codex` (subscription re-login updates the vault copy).
